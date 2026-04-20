@@ -5,19 +5,6 @@ import path from 'path';
 import { bundle } from '@remotion/bundler';
 import { renderMedia, selectComposition } from '@remotion/renderer';
 import { v2 as cloudinary } from 'cloudinary';
-import { execSync } from 'child_process';
-
-// Find chromium path dynamically
-let chromiumPath = '/run/current-system/sw/bin/chromium';
-try {
-  chromiumPath = execSync('which chromium || which chromium-browser || which google-chrome', 
-    { encoding: 'utf8' }
-  ).trim();
-  console.log('Found Chrome at:', chromiumPath);
-} catch {
-  console.warn('Could not find Chrome automatically, using default path');
-}
-process.env.CHROME_EXECUTABLE_PATH = chromiumPath;
 
 cloudinary.config({
   cloud_name: process.env.CLOUDINARY_CLOUD_NAME,
@@ -45,21 +32,18 @@ async function processVideoJob(job) {
   const { product, requester } = job;
   console.log(`Rendering video for: ${product}`);
 
-  // Bundle the Remotion project
   const bundled = await bundle({
     entryPoint: path.resolve('./src/index.ts'),
     webpackOverride: (config) => config,
   });
 
-  // Select the composition
   const composition = await selectComposition({
     serveUrl: bundled,
     id: 'PitchVideo',
     inputProps: job,
-    browserExecutable: chromiumPath,  // add this line
+    browserExecutable: null,   // let Remotion handle Chrome
   });
 
-  // Render the video
   const outputPath = `/tmp/video-${Date.now()}.mp4`;
   await renderMedia({
     composition,
@@ -67,11 +51,10 @@ async function processVideoJob(job) {
     codec: 'h264',
     outputLocation: outputPath,
     inputProps: job,
-    browserExecutable: chromiumPath,  // add this line
+    browserExecutable: null,   // let Remotion handle Chrome
   });
   console.log('Video rendered!');
 
-  // Upload to Cloudinary
   console.log('Uploading...');
   const result = await cloudinary.uploader.upload(outputPath, {
     resource_type: 'video',
@@ -80,10 +63,8 @@ async function processVideoJob(job) {
   });
   console.log('Uploaded:', result.secure_url);
 
-  // Clean up temp file
   fs.unlinkSync(outputPath);
 
-  // Send video to WhatsApp
   await sendWhatsAppVideo(requester, result.secure_url, product);
   console.log('Done! Notified user.');
 }

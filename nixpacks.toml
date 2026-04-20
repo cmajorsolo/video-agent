@@ -1,15 +1,14 @@
 [phases.setup]
 nixPkgs = [
-  "chromium",
   "nss",
   "nspr",
   "atk",
+  "at-spi2-atk",
   "cups",
   "libdrm",
   "dbus",
   "libxkbcommon",
   "xorg.libX11",
-  "xorg.libXcompose",
   "xorg.libXdamage",
   "xorg.libXext",
   "xorg.libXfixes",
@@ -19,5 +18,14 @@ nixPkgs = [
   "xorg.libxcb",
   "pango",
   "cairo",
-  "alsa-lib"
+  "alsa-lib",
+  "xorg.libXcomposite",
+  "xorg.libXcursor",
+  "xorg.libXi",
+  "xorg.libXtst",
+  "gtk3",
+  "glib"
 ]
+
+[phases.install]
+cmds = ["npm install", "npx remotion browser ensure"]
