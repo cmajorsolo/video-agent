@@ -44,6 +44,8 @@ COPY . .
 
 # Tell Remotion where Chrome is
 ENV CHROME_EXECUTABLE_PATH=/usr/bin/chromium
+ENV DISPLAY=:99
+ENV REMOTION_GL=angle
 
 EXPOSE 8080
 

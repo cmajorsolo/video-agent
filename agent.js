@@ -45,6 +45,10 @@ async function processVideoJob(job) {
     id: 'PitchVideo',
     inputProps: job,
     browserExecutable: chromiumPath,
+    chromiumOptions: {
+        disableWebSecurity: false,
+        gl: 'angle',
+    },
   });
 
   const outputPath = `/tmp/video-${Date.now()}.mp4`;
@@ -54,7 +58,17 @@ async function processVideoJob(job) {
     codec: 'h264',
     outputLocation: outputPath,
     inputProps: job,
-    browserExecutable: chromiumPath, 
+    browserExecutable: chromiumPath,
+    concurrency: 1,
+    timeoutInMilliseconds: 120000,
+    chromiumOptions: {
+        disableWebSecurity: false,
+        gl: 'angle',          // change from swangle to angle
+    },
+    x264Preset: 'ultrafast',
+    onProgress: ({ progress }) => {
+        console.log(`Rendering: ${Math.round(progress * 100)}%`);
+    },
   });
   console.log('Video rendered!');
 
