@@ -6,6 +6,8 @@ import { bundle } from '@remotion/bundler';
 import { renderMedia, selectComposition } from '@remotion/renderer';
 import { v2 as cloudinary } from 'cloudinary';
 
+const chromiumPath = process.env.CHROME_EXECUTABLE_PATH || null;
+
 cloudinary.config({
   cloud_name: process.env.CLOUDINARY_CLOUD_NAME,
   api_key:    process.env.CLOUDINARY_API_KEY,
@@ -37,11 +39,12 @@ async function processVideoJob(job) {
     webpackOverride: (config) => config,
   });
 
+  // In selectComposition:
   const composition = await selectComposition({
     serveUrl: bundled,
     id: 'PitchVideo',
     inputProps: job,
-    browserExecutable: null,   // let Remotion handle Chrome
+    browserExecutable: chromiumPath,
   });
 
   const outputPath = `/tmp/video-${Date.now()}.mp4`;
@@ -51,7 +54,7 @@ async function processVideoJob(job) {
     codec: 'h264',
     outputLocation: outputPath,
     inputProps: job,
-    browserExecutable: null,   // let Remotion handle Chrome
+    browserExecutable: chromiumPath, 
   });
   console.log('Video rendered!');
 
