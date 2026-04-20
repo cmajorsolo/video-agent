@@ -6,7 +6,7 @@ import { bundle } from '@remotion/bundler';
 import { renderMedia, selectComposition } from '@remotion/renderer';
 import { v2 as cloudinary } from 'cloudinary';
 
-process.env.CHROME_EXECUTABLE_PATH = '/usr/bin/chromium-browser';
+process.env.CHROME_EXECUTABLE_PATH = '/run/current-system/sw/bin/chromium';
 
 cloudinary.config({
   cloud_name: process.env.CLOUDINARY_CLOUD_NAME,
