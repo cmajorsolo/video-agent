@@ -5,8 +5,19 @@ import path from 'path';
 import { bundle } from '@remotion/bundler';
 import { renderMedia, selectComposition } from '@remotion/renderer';
 import { v2 as cloudinary } from 'cloudinary';
+import { execSync } from 'child_process';
 
-process.env.CHROME_EXECUTABLE_PATH = '/run/current-system/sw/bin/chromium';
+// Find chromium path dynamically
+let chromiumPath = '/run/current-system/sw/bin/chromium';
+try {
+  chromiumPath = execSync('which chromium || which chromium-browser || which google-chrome', 
+    { encoding: 'utf8' }
+  ).trim();
+  console.log('Found Chrome at:', chromiumPath);
+} catch {
+  console.warn('Could not find Chrome automatically, using default path');
+}
+process.env.CHROME_EXECUTABLE_PATH = chromiumPath;
 
 cloudinary.config({
   cloud_name: process.env.CLOUDINARY_CLOUD_NAME,
@@ -45,6 +56,7 @@ async function processVideoJob(job) {
     serveUrl: bundled,
     id: 'PitchVideo',
     inputProps: job,
+    browserExecutable: chromiumPath,  // add this line
   });
 
   // Render the video
@@ -55,6 +67,7 @@ async function processVideoJob(job) {
     codec: 'h264',
     outputLocation: outputPath,
     inputProps: job,
+    browserExecutable: chromiumPath,  // add this line
   });
   console.log('Video rendered!');
 
