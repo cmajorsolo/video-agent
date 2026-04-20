@@ -18,7 +18,6 @@ const FPS = 30;
 
 export const RemotionRoot: React.FC = () => {
   const durationSeconds = parseInt(defaultJob.duration) || 15;
-
   return (
     <Composition
       id="PitchVideo"
