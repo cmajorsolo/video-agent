@@ -8,8 +8,6 @@ import { v2 as cloudinary } from 'cloudinary';
 import { generateRemotionCode } from './generateVideo.js';
 import { generateVoiceovers, downloadBackgroundMusic } from './generateAudio.js';
 
-const chromiumPath = process.env.CHROME_EXECUTABLE_PATH || null;
-
 cloudinary.config({
   cloud_name: process.env.CLOUDINARY_CLOUD_NAME,
   api_key:    process.env.CLOUDINARY_API_KEY,
@@ -20,8 +18,10 @@ const app = express();
 app.use(express.json());
 const PORT = process.env.PORT || 4000;
 
+// ── Health check ──────────────────────────────────────────────────────────────
 app.get('/', (req, res) => res.send('Video agent running'));
 
+// ── Job receiver ──────────────────────────────────────────────────────────────
 app.post('/job', async (req, res) => {
   res.sendStatus(200);
   const job = req.body;
@@ -32,44 +32,50 @@ app.post('/job', async (req, res) => {
   });
 });
 
+// ── Main pipeline ─────────────────────────────────────────────────────────────
 async function processVideoJob(job) {
   const { product, requester } = job;
   console.log(`\n=== Starting job for: ${product} ===`);
 
-  // 1 — Generate custom Remotion code for this job
+  // Step 1 — Generate custom Remotion code with Claude
   console.log('[1/5] Generating custom video code with Claude...');
   await generateRemotionCode(job);
 
-  // 2 — Generate voiceovers for each scene
+  // Step 2 — Generate voiceovers
   console.log('[2/5] Generating voiceovers...');
   await generateVoiceovers(job.scenes);
 
-  // 3 — Download background music
+  // Step 3 — Background music
   console.log('[3/5] Getting background music...');
   await downloadBackgroundMusic(job.tone);
 
-  // 4 — Render with Remotion
-  console.log('[4/5] Rendering video...');
+  // Step 4 — Bundle and render
+  console.log('[4/5] Bundling Remotion project...');
   const bundled = await bundle({
     entryPoint: path.resolve('./remotion-project/src/index.ts'),
     webpackOverride: (config) => config,
   });
 
+  console.log('Selecting composition...');
+  const chromiumPath = process.env.CHROME_EXECUTABLE_PATH || null;
   const composition = await selectComposition({
     serveUrl: bundled,
     id: 'PitchVideo',
     inputProps: job,
-    browserExecutable: process.env.CHROME_EXECUTABLE_PATH || null,
+    browserExecutable: chromiumPath,
+    chromiumOptions: { gl: 'angle' },
   });
+  console.log(`Composition: ${composition.durationInFrames} frames at ${composition.fps}fps`);
 
   const outputPath = `/tmp/video-${Date.now()}.mp4`;
+  console.log('Rendering...');
   await renderMedia({
     composition,
     serveUrl: bundled,
     codec: 'h264',
     outputLocation: outputPath,
     inputProps: job,
-    browserExecutable: process.env.CHROME_EXECUTABLE_PATH || null,
+    browserExecutable: chromiumPath,
     concurrency: 1,
     x264Preset: 'ultrafast',
     chromiumOptions: { gl: 'angle' },
@@ -79,53 +85,8 @@ async function processVideoJob(job) {
   });
   console.log('\nRender complete!');
 
-  // 5 — Upload and notify
-  console.log('[5/5] Uploading and notifying...');
-  const result = await cloudinary.uploader.upload(outputPath, {
-    resource_type: 'video',
-    folder: 'pitch-videos',
-    public_id: `video-${Date.now()}`,
-  });
-  fs.unlinkSync(outputPath);
-
-  await sendWhatsAppVideo(requester, result.secure_url, product);
-  console.log(`=== Done! Video sent to ${requester} ===\n`);
-}
-
-  // In selectComposition:
-  const composition = await selectComposition({
-    serveUrl: bundled,
-    id: 'PitchVideo',
-    inputProps: job,
-    browserExecutable: chromiumPath,
-    chromiumOptions: {
-        disableWebSecurity: false,
-        gl: 'angle',
-    },
-  });
-
-  const outputPath = `/tmp/video-${Date.now()}.mp4`;
-  await renderMedia({
-    composition,
-    serveUrl: bundled,
-    codec: 'h264',
-    outputLocation: outputPath,
-    inputProps: job,
-    browserExecutable: chromiumPath,
-    concurrency: 1,
-    timeoutInMilliseconds: 120000,
-    chromiumOptions: {
-        disableWebSecurity: false,
-        gl: 'angle',          // change from swangle to angle
-    },
-    x264Preset: 'ultrafast',
-    onProgress: ({ progress }) => {
-        console.log(`Rendering: ${Math.round(progress * 100)}%`);
-    },
-  });
-  console.log('Video rendered!');
-
-  console.log('Uploading...');
+  // Step 5 — Upload and notify
+  console.log('[5/5] Uploading to Cloudinary...');
   const result = await cloudinary.uploader.upload(outputPath, {
     resource_type: 'video',
     folder: 'pitch-videos',
@@ -136,48 +97,60 @@ async function processVideoJob(job) {
   fs.unlinkSync(outputPath);
 
   await sendWhatsAppVideo(requester, result.secure_url, product);
-  console.log('Done! Notified user.');
+  console.log(`=== Done! Video sent to ${requester} ===\n`);
+}
 
+// ── Send video via WhatsApp ───────────────────────────────────────────────────
 async function sendWhatsAppVideo(to, videoUrl, product) {
-  const res = await fetch(`https://graph.facebook.com/v19.0/${process.env.PHONE_NUMBER_ID}/messages`, {
-    method: 'POST',
-    headers: {
-      'Authorization': `Bearer ${process.env.WHATSAPP_TOKEN}`,
-      'Content-Type': 'application/json',
-    },
-    body: JSON.stringify({
-      messaging_product: 'whatsapp',
-      to,
-      type: 'video',
-      video: {
-        link: videoUrl,
-        caption: `Here is your pitch video for ${product}!`,
+  const res = await fetch(
+    `https://graph.facebook.com/v19.0/${process.env.PHONE_NUMBER_ID}/messages`,
+    {
+      method: 'POST',
+      headers: {
+        'Authorization': `Bearer ${process.env.WHATSAPP_TOKEN}`,
+        'Content-Type': 'application/json',
       },
-    }),
-  });
+      body: JSON.stringify({
+        messaging_product: 'whatsapp',
+        to,
+        type: 'video',
+        video: {
+          link: videoUrl,
+          caption: `Here is your pitch video for ${product}!`,
+        },
+      }),
+    }
+  );
+
   if (!res.ok) {
     const err = await res.text();
-    console.error('WhatsApp send error:', err);
-    await notifyWhatsApp(to, `Your video is ready: ${videoUrl}`);
+    console.error('WhatsApp video send error:', err);
+    await notifyWhatsApp(to, `Your video is ready! Watch it here: ${videoUrl}`);
   }
 }
 
+// ── Send text message via WhatsApp ────────────────────────────────────────────
 async function notifyWhatsApp(to, message) {
-  await fetch(`https://graph.facebook.com/v19.0/${process.env.PHONE_NUMBER_ID}/messages`, {
-    method: 'POST',
-    headers: {
-      'Authorization': `Bearer ${process.env.WHATSAPP_TOKEN}`,
-      'Content-Type': 'application/json',
-    },
-    body: JSON.stringify({
-      messaging_product: 'whatsapp',
-      to,
-      type: 'text',
-      text: { body: message },
-    }),
-  });
+  const res = await fetch(
+    `https://graph.facebook.com/v19.0/${process.env.PHONE_NUMBER_ID}/messages`,
+    {
+      method: 'POST',
+      headers: {
+        'Authorization': `Bearer ${process.env.WHATSAPP_TOKEN}`,
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({
+        messaging_product: 'whatsapp',
+        to,
+        type: 'text',
+        text: { body: message },
+      }),
+    }
+  );
+  if (!res.ok) console.error('WhatsApp notify error:', await res.text());
 }
 
+// ── Error handlers ────────────────────────────────────────────────────────────
 process.on('uncaughtException', err => console.error('UNCAUGHT:', err));
 process.on('unhandledRejection', err => console.error('UNHANDLED:', err));
 
