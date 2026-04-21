@@ -137,7 +137,6 @@ async function processVideoJob(job) {
 
   await sendWhatsAppVideo(requester, result.secure_url, product);
   console.log('Done! Notified user.');
-}
 
 async function sendWhatsAppVideo(to, videoUrl, product) {
   const res = await fetch(`https://graph.facebook.com/v19.0/${process.env.PHONE_NUMBER_ID}/messages`, {
